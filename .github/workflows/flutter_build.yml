@@ -1,0 +1,48 @@
+name: Build Flutter APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Generate Android Project Files
+        run: |
+          cd flutter_app
+          flutter create --platforms=android .
+
+      - name: Get Flutter Dependencies
+        run: |
+          cd flutter_app
+          flutter pub get
+
+      - name: Build APK
+        run: |
+          cd flutter_app
+          flutter build apk --release
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Smart_Attendance_APK
+          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk

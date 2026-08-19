@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Smart Attendance SaaS - Admin Console</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="flex h-screen bg-slate-900 text-slate-100 font-sans antialiased overflow-hidden">
+
+    <!-- SIDEBAR -->
+    <aside class="w-64 bg-slate-950 border-r border-slate-800 flex flex-col flex-shrink-0">
+        <div class="p-5 border-b border-slate-800 flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-blue-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
+                <i class="fa-solid fa-shield-halved text-lg"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-base leading-tight text-white tracking-wide">ATTENDANCE<span class="text-indigo-400">AI</span></h1>
+                <span class="text-xs text-slate-400">Enterprise Control</span>
+            </div>
+        </div>
+
+        <nav class="flex-1 p-4 space-y-1.5 overflow-y-auto custom-scrollbar">
+            <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-indigo-400 bg-indigo-500/10">
+                <i class="fa-solid fa-chart-pie w-5 text-center"></i> Overview
+            </button>
+            <button onclick="switchTab('classrooms')" id="nav-classrooms" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+                <i class="fa-solid fa-door-open w-5 text-center"></i> Classrooms & BLE
+            </button>
+            <button onclick="switchTab('students')" id="nav-students" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+                <i class="fa-solid fa-users w-5 text-center"></i> Students & Devices
+            </button>
+            <button onclick="switchTab('timetable')" id="nav-timetable" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+                <i class="fa-solid fa-calendar-days w-5 text-center"></i> Timetable
+            </button>
+            <button onclick="switchTab('live')" id="nav-live" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+                <i class="fa-solid fa-bolt w-5 text-center text-amber-400"></i> Live Verification Logs
+            </button>
+        </nav>
+
+        <!-- TOKEN / AUTH BAR IN FOOTER -->
+        <div class="p-4 border-t border-slate-800 bg-slate-950/50">
+            <label class="text-xs text-slate-400 block mb-1">Admin Bearer Token:</label>
+            <input type="password" id="adminTokenInput" placeholder="Paste JWT token here" 
+                class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 mb-2">
+            <button onclick="saveToken()" class="w-full bg-slate-800 hover:bg-slate-700 text-xs py-1.5 rounded text-slate-300 font-medium transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-key text-[10px]"></i> Apply Token
+            </button>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="flex-1 flex flex-col min-w-0 bg-slate-900">
+        <!-- TOP NAVBAR -->
+        <header class="h-16 border-b border-slate-800 flex items-center justify-between px-8 bg-slate-950/40">
+            <div class="flex items-center gap-3">
+                <h2 id="pageTitle" class="text-lg font-semibold text-white">System Overview</h2>
+                <span id="apiStatusBadge" class="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    API Connected
+                </span>
+            </div>
+            <div class="flex items-center gap-4">
+                <button onclick="triggerDailyReports()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow-md shadow-indigo-600/20 flex items-center gap-2">
+                    <i class="fa-solid fa-file-excel"></i> Trigger Daily Reports
+                </button>
+                <div class="h-6 w-px bg-slate-800"></div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>4 Security Locks Active</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- VIEW PANELS CONTAINER -->
+        <section class="flex-1 p-8 overflow-y-auto custom-scrollbar" id="mainContainer">
+            <!-- Panels will dynamically load here -->
+        </section>
+    </main>
+
+    <script>
+        const API_BASE = window.location.origin.includes(':8000') ? window.location.origin : 'http://localhost:8000';
+        let currentTab = 'dashboard';
+        let liveRefreshInterval = null;
+
+        document.getElementById('adminTokenInput').value = localStorage.getItem('saas_admin_token') || '';
+
+        function saveToken() {
+            const token = document.getElementById('adminTokenInput').value.trim();
+            localStorage.setItem('saas_admin_token', token);
+            showToast("Token updated in local storage!", "success");
+            loadCurrentTab();
+        }
+
+        async function fetchAPI(endpoint, options = {}) {
+            const token = localStorage.getItem('saas_admin_token') || '';
+            const headers = {
+                'Content-Type': 'application/json',
+                ...options.headers,
+            };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}${endpoint}`, { credentials: 'omit', ...options, headers });
+                if (res.status === 401 || res.status === 403) {
+                    showToast("Authentication error: Please provide a valid Admin JWT Token in the sidebar.", "error");
+                    throw new Error("Unauthorized");
+                }
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ detail: res.statusText }));
+                    throw new Error(err.detail || "Request failed");
+                }
+                return await res.json();
+            } catch (err) {
+                console.error(`Fetch error on ${endpoint}:`, err);
+                throw err;
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            const bg = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-red-600' : 'bg-indigo-600';
+            toast.className = `fixed bottom-6 right-6 ${bg} text-white text-xs px-4 py-3 rounded-lg shadow-xl z-50 transition-all duration-300 transform translate-y-0 flex items-center gap-2`;
+            toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-check' : type === 'error' ? 'fa-triangle-exclamation' : 'fa-info'}"></i> <span>${message}</span>`;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.nav-item').forEach(b => {
+                b.className = "nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/60";
+            });
+            const activeBtn = document.getElementById(`nav-${tab}`);
+            if (activeBtn) activeBtn.className = "nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition text-indigo-400 bg-indigo-500/10";
+            
+            clearInterval(liveRefreshInterval);
+            loadCurrentTab();
+        }
+
+        function loadCurrentTab() {
+            switch(currentTab) {
+                case 'dashboard': renderDashboard(); break;
+                case 'classrooms': renderClassrooms(); break;
+                case 'students': renderStudents(); break;
+                case 'timetable': renderTimetable(); break;
+                case 'live': 
+                    renderLiveLogs();
+                    liveRefreshInterval = setInterval(loadLiveLogsData, 10000);
+                    break;
+            }
+        }
+
+        // ====================================================================
+        // 1. DASHBOARD
+        // ====================================================================
+        async function renderDashboard() {
+            document.getElementById('pageTitle').innerText = "System Overview";
+            const container = document.getElementById('mainContainer');
+            container.innerHTML = `<div class="text-center py-12 text-slate-500"><i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i><p>Loading analytics...</p></div>`;
+
+            try {
+                const stats = await fetchAPI('/admin/dashboard_stats').catch(() => ({
+                    total_students: 0, total_classrooms: 0, today_attendance_percent: 0, active_alerts: 0
+                }));
+
+                container.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                        <div class="bg-slate-950/70 border border-slate-800 p-6 rounded-2xl relative overflow-hidden">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-xs font-semibold uppercase text-slate-400">Total Enrolled Students</p>
+                                    <h3 class="text-3xl font-extrabold text-white mt-2">${stats.total_students}</h3>
+                                </div>
+                                <div class="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center text-xl border border-blue-500/20">
+                                    <i class="fa-solid fa-user-graduate"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-950/70 border border-slate-800 p-6 rounded-2xl relative overflow-hidden">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-xs font-semibold uppercase text-slate-400">Configured Classrooms</p>
+                                    <h3 class="text-3xl font-extrabold text-white mt-2">${stats.total_classrooms}</h3>
+                                </div>
+                                <div class="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center text-xl border border-purple-500/20">
+                                    <i class="fa-solid fa-building-columns"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-950/70 border border-slate-800 p-6 rounded-2xl relative overflow-hidden">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-xs font-semibold uppercase text-slate-400">Today's Attendance Rate</p>
+                                    <h3 class="text-3xl font-extrabold text-emerald-400 mt-2">${stats.today_attendance_percent}%</h3>
+                                </div>
+                                <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl border border-emerald-500/20">
+                                    <i class="fa-solid fa-check-double"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-950/70 border border-slate-800 p-6 rounded-2xl relative overflow-hidden">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-xs font-semibold uppercase text-slate-400">Security Intrusion Alerts</p>
+                                    <h3 class="text-3xl font-extrabold text-rose-400 mt-2">${stats.active_alerts}</h3>
+                                </div>
+                                <div class="w-12 h-12 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center text-xl border border-rose-500/20">
+                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4-LOCK SECURITY ARCHITECTURE CARD -->
+                    <div class="bg-slate-950/50 border border-slate-800 rounded-2xl p-6 mb-8">
+                        <h4 class="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-shield-halved text-indigo-400"></i> Multi-Node 4-Lock Verification Matrix
+                        </h4>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div class="bg-slate-900/90 border border-slate-800/80 p-4 rounded-xl">
+                                <div class="text-xs font-bold text-indigo-400 mb-1">LOCK 1: HMAC Cryptography</div>
+                                <p class="text-xs text-slate-400">Validates SHA256 cryptographic signature against replay attacks & payload tampering.</p>
+                            </div>
+                            <div class="bg-slate-900/90 border border-slate-800/80 p-4 rounded-xl">
+                                <div class="text-xs font-bold text-indigo-400 mb-1">LOCK 2: Dynamic BLE Match</div>
+                                <p class="text-xs text-slate-400">Verifies student's live scanned ESP32 beacon matches the active room assigned for that time.</p>
+                            </div>
+                            <div class="bg-slate-900/90 border border-slate-800/80 p-4 rounded-xl">
+                                <div class="text-xs font-bold text-indigo-400 mb-1">LOCK 3: Server Time Window</div>
+                                <p class="text-xs text-slate-400">Enforces a strict 10-minute maximum grace period from timetable start time.</p>
+                            </div>
+                            <div class="bg-slate-900/90 border border-slate-800/80 p-4 rounded-xl">
+                                <div class="text-xs font-bold text-indigo-400 mb-1">LOCK 4: Edge AI Face Match</div>
+                                <p class="text-xs text-slate-400">Computes 128-point Euclidean distance (threshold &le; 0.6) between live and stored face.</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch(e) {
+                container.innerHTML = `<div class="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl text-xs">Failed to load statistics: ${e.message}</div>`;
+            }
+        }
+
+        // ====================================================================
+        // 2. CLASSROOMS
+        // ====================================================================
+        async function renderClassrooms() {
+            document.getElementById('pageTitle').innerText = "Classrooms & BLE Beacons";
+            const container = document.getElementById('mainContainer');
+            
+            container.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- ADD FORM -->
+                    <div class="bg-slate-950/70 border border-slate-800 p-6 rounded-2xl h-fit">
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-plus text-indigo-400"></i> Register New Classroom
+                        </h3>
+                        <form onsubmit="event.preventDefault(); submitAddClassroom();" class="space-y-4 text-xs">
+                            <div>
+                                <label class="block text-slate-400 mb-1 font-medium">Room ID (Unique Code)</label>
+                                <input type="text" id="cr_id" placeholder="e.g. ROOM_301" required
+                                    class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-slate-400 mb-1 font-medium">Room Display Name</label>
+                                <input type="text" id="cr_name" placeholder="e.g. Computer Architecture Lab" required
+                                    class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-slate-400 mb-1 font-medium">ESP32 BLE Beacon UUID</label>
+                                <input type="text" id="cr_uuid" placeholder="e.g. e2c56db5-dffb-48d2-b060-d0f5a71096e0" required
+                                    class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 font-mono text-[11px]">
+                            </div>
+                            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-lg transition shadow-md shadow-indigo-600/20">
+                                Save Classroom
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- LIST TABLE -->
+                    <div class="lg:col-span-2 bg-slate-950/70 border border-slate-800 rounded-2xl overflow-hidden flex flex-col">
+                        <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300">Classroom Beacon Registry</h4>
+                            <button onclick="renderClassrooms()" class="text-xs text-slate-400 hover:text-indigo-400 transition"><i class="fa-solid fa-rotate"></i></button>
+                        </div>
+                        <div class="overflow-x-auto flex-1 custom-scrollbar">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-900/60 text-slate-400 border-b border-slate-800 uppercase tracking-wider">
+                                    <tr>
+                                        <th class="p-3.5">Room ID</th>
+                                        <th class="p-3.5">Room Name</th>
+                                        <th class="p-3.5">ESP32 UUID</th>
+                                        <th class="p-3.5 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="classroomTableBody" class="divide-y divide-slate-800/60 text-slate-200">
+                                    <tr><td colspan="4" class="text-center py-8 text-slate-500">Loading classrooms...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            try {
+                const classrooms = await fetchAPI('/admin/classrooms');
+                const tbody = document.getElementById('classroomTableBody');
+                if (classrooms.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-slate-500">No classrooms registered yet. Add one using the form.</td></tr>`;
+                    return;
+                }
+                tbody.innerHTML = classrooms.map(c => `
+                    <tr class="hover:bg-slate-900/40 transition">
+                        <td class="p-3.5 font-bold text-indigo-400">${c.room_id}</td>
+                        <td class="p-3.5">${c.room_name}</td>
+                        <td class="p-3.5 font-mono text-[11px] text-slate-400">${c.esp32_uuid}</td>
+                        <td class="p-3.5 text-right">
+                            <button onclick="deleteClassroom('${c.room_id}')" class="text-rose-400 hover:text-rose-300 px-2 py-1 bg-rose-500/10 rounded hover:bg-rose-500/20 transition">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch(e) {
+                document.getElementById('classroomTableBody').innerHTML = `<tr><td colspan="4" class="text-center py-8 text-rose-400">Failed to load: ${e.message}</td></tr>`;
+            }
+        }
+
+        async function submitAddClassroom() {
+            const body = {
+                room_id: document.getElementById('cr_id').value.trim(),
+                room_name: document.getElementById('cr_name').value.trim(),
+                esp32_uuid: document.getElementById('cr_uuid').value.trim(),
+            };
+            try {
+                await fetchAPI('/admin/classrooms', { method: 'POST', credentials: 'omit', body: JSON.stringify(body) });
+                showToast(`Classroom ${body.room_id} created!`, 'success');
+                renderClassrooms();
+            } catch(e) {
+                showToast(e.message, 'error');
+            }
+        }
+
+        async function deleteClassroom(roomId) {
+            if (!confirm(`Delete classroom ${roomId}?`)) return;
+            try {
+                await fetchAPI(`/admin/classrooms/${roomId}`, { method: 'DELETE' });
+                showToast(`Classroom ${roomId} deleted.`, 'success');
+                renderClassrooms();
+            } catch(e) {
+                showToast(e.message, 'error');
+            }
+        }
+
+        // ====================================================================
+        // 3. STUDENTS & DEVICE BINDING
+        // ====================================================================
+        async function renderStudents() {
+            document.getElementById('pageTitle').innerText = "Students & Device Binding";
+            const container = document.getElementById('mainContainer');
+
+            container.innerHTML = `
+                <div class="space-y-6">
+                    <!-- BULK UPLOAD BAR -->
+                    <div class="bg-slate-950/70 border border-slate-800 p-6 rounded-2xl">
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200 mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-file-arrow-up text-indigo-400"></i> Student Quick Creation / Bulk Import
+                        </h3>
+                        <p class="text-xs text-slate-400 mb-4">Add single student or paste JSON array of students ` + '<code>[{"roll_no":"101","name":"John","email":"john@edu.com","password":"pwd"}]</code>' + `.</p>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs mb-3">
+                            <input type="text" id="st_roll" placeholder="Roll No (e.g. 2026CS101)" class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white">
+                            <input type="text" id="st_name" placeholder="Full Name" class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white">
+                            <input type="email" id="st_email" placeholder="Email Address" class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white">
+                            <input type="password" id="st_pwd" placeholder="Password" class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white">
+                        </div>
+                        <button onclick="submitSingleStudent()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition">
+                            Create Student
+                        </button>
+                    </div>
+
+                    <!-- STUDENTS TABLE -->
+                    <div class="bg-slate-950/70 border border-slate-800 rounded-2xl overflow-hidden">
+                        <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300">Enrolled Students & Device Lock Status</h4>
+                            <button onclick="renderStudents()" class="text-xs text-slate-400 hover:text-indigo-400 transition"><i class="fa-solid fa-rotate"></i></button>
+                        </div>
+                        <div class="overflow-x-auto custom-scrollbar">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-900/60 text-slate-400 border-b border-slate-800 uppercase tracking-wider">
+                                    <tr>
+                                        <th class="p-3.5">Roll No</th>
+                                        <th class="p-3.5">Student Name</th>
+                                        <th class="p-3.5">Email</th>
+                                        <th class="p-3.5">Bound Device ID</th>
+                                        <th class="p-3.5 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="studentsTableBody" class="divide-y divide-slate-800/60 text-slate-200">
+                                    <tr><td colspan="5" class="text-center py-8 text-slate-500">Loading student directory...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            try {
+                const students = await fetchAPI('/admin/students');
+                const tbody = document.getElementById('studentsTableBody');
+                if (students.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-slate-500">No students registered yet.</td></tr>`;
+                    return;
+                }
+                tbody.innerHTML = students.map(s => `
+                    <tr class="hover:bg-slate-900/40 transition">
+                        <td class="p-3.5 font-bold text-indigo-400">${s.roll_no}</td>
+                        <td class="p-3.5">${s.name}</td>
+                        <td class="p-3.5 text-slate-400">${s.email}</td>
+                        <td class="p-3.5">
+                            ${s.device_id 
+                                ? `<span class="font-mono text-[11px] bg-slate-800 px-2 py-0.5 rounded text-amber-300 border border-slate-700">${s.device_id}</span>` 
+                                : `<span class="text-slate-500 italic">Unbound (Any device on 1st login)</span>`}
+                        </td>
+                        <td class="p-3.5 text-right space-x-2">
+                            <button onclick="registerSampleFace('${s.roll_no}')" class="text-indigo-400 hover:text-indigo-300 px-2.5 py-1 bg-indigo-500/10 rounded border border-indigo-500/20 text-[11px] font-medium transition" title="Register 128-float face encoding">
+                                <i class="fa-solid fa-id-badge"></i> Enroll Face
+                            </button>
+                            <button onclick="unbindDevice('${s.roll_no}')" class="text-amber-400 hover:text-amber-300 px-2.5 py-1 bg-amber-500/10 rounded border border-amber-500/20 text-[11px] font-medium transition" title="Unbind current device">
+                                <i class="fa-solid fa-link-slash"></i> Unbind Device
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch(e) {
+                document.getElementById('studentsTableBody').innerHTML = `<tr><td colspan="5" class="text-center py-8 text-rose-400">Failed to load: ${e.message}</td></tr>`;
+            }
+        }
+
+        async function submitSingleStudent() {
+            const student = {
+                roll_no: document.getElementById('st_roll').value.trim(),
+                name: document.getElementById('st_name').value.trim(),
+                email: document.getElementById('st_email').value.trim(),
+                password: document.getElementById('st_pwd').value.trim()
+            };
+            if (!student.roll_no || !student.name || !student.email || !student.password) {
+                showToast("Please fill all student fields.", "error");
+                return;
+            }
+            try {
+                await fetchAPI('/admin/bulk_upload_students', {
+                    method: 'POST',
+                    credentials: 'omit',
+                    body: JSON.stringify([student])
+                });
+                showToast(`Student ${student.name} created!`, 'success');
+                renderStudents();
+            } catch(e) {
+                showToast(e.message, 'error');
+            }
+        }
+
+        async function unbindDevice(rollNo) {
+            if (!confirm(`Reset and unbind device for student ${rollNo}? This will allow login from a new phone.`)) return;
+            try {
+                await fetchAPI(`/auth/reset_device/${rollNo}`, { method: 'POST' });
+                showToast(`Device binding cleared for ${rollNo}.`, 'success');
+                renderStudents();
+            } catch(e) {
+                showToast(e.message, 'error');
+            }
+        }
+
+        async function registerSampleFace(rollNo) {
+            // Generate standard 128 floats vector
+            const encoding = Array.from({length: 128}, () => 0.1);
+            try {
+                await fetchAPI(`/admin/register_face/${rollNo}`, {
+                    method: 'POST',
+                    credentials: 'omit',
+                    body: JSON.stringify({ face_encoding: encoding })
+                });
+                showToast(`128-point face encoding registered for ${rollNo}!`, 'success');
+            } catch(e) {
+                showToast(e.message, 'error');
+            }
+        }
+
+        // ====================================================================
+        // 4. TIMETABLE
+        // ====================================================================
+        async function renderTimetable() {
+            document.getElementById('pageTitle').innerText = "Class Timetable";
+            const container = document.getElementById('mainContainer');
+
+            container.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- ADD TIMETABLE -->
+                    <div class="bg-slate-950/70 border border-slate-800 p-6 rounded-2xl h-fit">
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-calendar-plus text-indigo-400"></i> Schedule Class
+                        </h3>
+                        <form onsubmit="event.preventDefault(); submitTimetable();" class="space-y-4 text-xs">
+                            <div>
+                                <label class="block text-slate-400 mb-1 font-medium">Classroom ID</label>
+                                <input type="text" id="tt_room_id" placeholder="e.g. ROOM_301" required
+                                    class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-slate-400 mb-1 font-medium">Subject Name</label>
+                                <input type="text" id="tt_subject" placeholder="e.g. Data Structures & Algorithms" required
+                                    class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-slate-400 mb-1 font-medium">Start Time</label>
+                                <input type="datetime-local" id="tt_start" required
+                                    class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-slate-400 mb-1 font-medium">End Time</label>
+                                <input type="datetime-local" id="tt_end" required
+                                    class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-slate-400 mb-1 font-medium">Teacher Email</label>
+                                <input type="email" id="tt_teacher" placeholder="teacher@college.edu" required
+                                    class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-lg transition shadow-md shadow-indigo-600/20">
+                                Save Timetable Entry
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- TIMETABLE LIST -->
+                    <div class="lg:col-span-2 bg-slate-950/70 border border-slate-800 rounded-2xl overflow-hidden flex flex-col">
+                        <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300">Scheduled Classes</h4>
+                            <button onclick="renderTimetable()" class="text-xs text-slate-400 hover:text-indigo-400 transition"><i class="fa-solid fa-rotate"></i></button>
+                        </div>
+                        <div class="overflow-x-auto flex-1 custom-scrollbar">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-900/60 text-slate-400 border-b border-slate-800 uppercase tracking-wider">
+                                    <tr>
+                                        <th class="p-3.5">ID</th>
+                                        <th class="p-3.5">Subject</th>
+                                        <th class="p-3.5">Room</th>
+                                        <th class="p-3.5">Timing</th>
+                                        <th class="p-3.5">Teacher</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="timetableBody" class="divide-y divide-slate-800/60 text-slate-200">
+                                    <tr><td colspan="5" class="text-center py-8 text-slate-500">Loading schedule...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            try {
+                const ttList = await fetchAPI('/admin/timetable');
+                const tbody = document.getElementById('timetableBody');
+                if (ttList.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-slate-500">No classes scheduled yet.</td></tr>`;
+                    return;
+                }
+                tbody.innerHTML = ttList.map(t => `
+                    <tr class="hover:bg-slate-900/40 transition">
+                        <td class="p-3.5 font-bold text-slate-400">#${t.id}</td>
+                        <td class="p-3.5 font-semibold text-white">${t.subject}</td>
+                        <td class="p-3.5 font-mono text-indigo-400">${t.room_id}</td>
+                        <td class="p-3.5 text-slate-300">${new Date(t.start_time).toLocaleString()} &rarr; ${new Date(t.end_time).toLocaleTimeString()}</td>
+                        <td class="p-3.5 text-slate-400">${t.teacher_email}</td>
+                    </tr>
+                `).join('');
+            } catch(e) {
+                document.getElementById('timetableBody').innerHTML = `<tr><td colspan="5" class="text-center py-8 text-rose-400">Failed to load: ${e.message}</td></tr>`;
+            }
+        }
+
+        async function submitTimetable() {
+            const body = {
+                room_id: document.getElementById('tt_room_id').value.trim(),
+                subject: document.getElementById('tt_subject').value.trim(),
+                start_time: new Date(document.getElementById('tt_start').value).toISOString(),
+                end_time: new Date(document.getElementById('tt_end').value).toISOString(),
+                teacher_email: document.getElementById('tt_teacher').value.trim()
+            };
+            try {
+                await fetchAPI('/admin/timetable', { method: 'POST', credentials: 'omit', body: JSON.stringify(body) });
+                showToast(`Timetable for ${body.subject} created!`, 'success');
+                renderTimetable();
+            } catch(e) {
+                showToast(e.message, 'error');
+            }
+        }
+
+        // ====================================================================
+        // 5. LIVE VERIFICATION LOGS
+        // ====================================================================
+        async function renderLiveLogs() {
+            document.getElementById('pageTitle').innerText = "Live Attendance Logs (Real-time)";
+            const container = document.getElementById('mainContainer');
+
+            container.innerHTML = `
+                <div class="bg-slate-950/70 border border-slate-800 rounded-2xl overflow-hidden flex flex-col">
+                    <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950">
+                        <div class="flex items-center gap-3">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300">Live Verification Stream</h4>
+                            <span class="text-[11px] text-slate-500 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Auto-refreshing every 10s</span>
+                        </div>
+                        <button onclick="loadLiveLogsData()" class="text-xs text-slate-400 hover:text-indigo-400 transition"><i class="fa-solid fa-rotate"></i></button>
+                    </div>
+                    <div class="overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-900/60 text-slate-400 border-b border-slate-800 uppercase tracking-wider">
+                                <tr>
+                                    <th class="p-3.5">Timestamp</th>
+                                    <th class="p-3.5">Roll No</th>
+                                    <th class="p-3.5">Student Name</th>
+                                    <th class="p-3.5">Subject</th>
+                                    <th class="p-3.5">Status</th>
+                                    <th class="p-3.5">Security / Issue Flag</th>
+                                </tr>
+                            </thead>
+                            <tbody id="liveLogsBody" class="divide-y divide-slate-800/60 text-slate-200">
+                                <tr><td colspan="6" class="text-center py-8 text-slate-500">Connecting to live feed...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+
+            loadLiveLogsData();
+        }
+
+        async function loadLiveLogsData() {
+            const tbody = document.getElementById('liveLogsBody');
+            if (!tbody) return;
+            try {
+                const logs = await fetchAPI('/admin/attendance_logs');
+                if (logs.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-500">No attendance records logged yet today.</td></tr>`;
+                    return;
+                }
+                tbody.innerHTML = logs.map(l => {
+                    let statusBadge = '';
+                    if (l.status === 'present') {
+                        statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PRESENT</span>`;
+                    } else if (l.status === 'late') {
+                        statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">LATE</span>`;
+                    } else {
+                        statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">REJECTED</span>`;
+                    }
+
+                    let flagBadge = l.issue_flag 
+                        ? `<span class="px-2.5 py-0.5 rounded text-[11px] font-mono bg-rose-500/20 text-rose-300 border border-rose-500/40"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${l.issue_flag}</span>`
+                        : `<span class="text-slate-500 text-xs">Clear (All Locks Passed)</span>`;
+
+                    return `
+                        <tr class="hover:bg-slate-900/40 transition">
+                            <td class="p-3.5 font-mono text-slate-400 text-[11px]">${l.timestamp}</td>
+                            <td class="p-3.5 font-bold text-indigo-400">${l.roll_no}</td>
+                            <td class="p-3.5 font-medium text-white">${l.student_name}</td>
+                            <td class="p-3.5 text-slate-300">${l.subject}</td>
+                            <td class="p-3.5">${statusBadge}</td>
+                            <td class="p-3.5">${flagBadge}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch(e) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-rose-400">Failed to load logs: ${e.message}</td></tr>`;
+            }
+        }
+
+        async function triggerDailyReports() {
+            try {
+                const res = await fetchAPI('/attendance/trigger_reports', { method: 'POST' });
+                showToast(res.message, 'success');
+            } catch(e) {
+                showToast(e.message, 'error');
+            }
+        }
+
+        // Initialize view
+        window.onload = () => switchTab('dashboard');
+    </script>
+</body>
+</html>

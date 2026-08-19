@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: attendance_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: attendance_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    build: .
+    container_name: attendance_api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/attendance_db
+      - SECRET_KEY=${SECRET_KEY:-super-secret-jwt-key-change-in-production}
+      - SECRET_HMAC_KEY=${SECRET_HMAC_KEY:-hmac-secret-key-change-in-production}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@college.edu}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./reports:/app/reports
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
