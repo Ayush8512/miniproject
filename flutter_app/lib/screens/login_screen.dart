@@ -98,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       : ElevatedButton(
                           onPressed: _login,
                           style: ElevatedButton.styleFrom(
-                            minimumSize: const Size.infinity,
+                            minimumSize: const Size(double.infinity, 50),
                             padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
                           child: const Text('LOGIN'),
